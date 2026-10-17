@@ -2033,3 +2033,635 @@ int main(){
     int x,y;
     long long d = dp[x][y];
 }
+
+{
+    "Kyopro Template": {
+        "prefix": "cpp",
+        "body": [
+            "#include <bits/stdc++.h>",
+            "using namespace std;",
+            "using ll = long long;",
+            "#define ALL(v) (v).begin(), (v).end()",
+            "#define RALL(v) (v).rbegin(), (v).rend()",
+            "",
+            "// Aliases",
+            "using vi = vector<int>;",
+            "using vl = vector<ll>;",
+            "using vs = vector<string>;",
+            "using vc = vector<char>;",
+            "using vb = vector<bool>;",
+            "using vpi = vector<pair<int, int>>;",
+            "using vpl = vector<pair<ll, ll>>;",
+            "using vvi = vector<vector<int>>;",
+            "using vvl = vector<vector<ll>>;",
+            "using vvb = vector<vector<bool>>;",
+            "",
+            "// https://github.com/rmp521/AI-library/blob/main/all",
+            "",
+            "int main() {",
+            "    $0",
+            "}"
+        ],
+        "description": "競プロ用テンプレート(エイリアス・マクロ込)"
+    },
+    "for loop": {
+        "prefix": "forloop",
+        "body": [
+            "for(int ${1:i}=0;${1:i}<${2:N};${1:i}++){",
+            "    $0",
+            "}"
+        ],
+        "description": "Basic for loop"
+    },
+    "one-dimensional array": {
+        "prefix": "vec1",
+        "body": [
+            "vector<${1:int}> ${2:A}(${3:N});"
+        ],
+        "description": "1D vector with size N"
+    },
+    "two-dimensional array": {
+        "prefix": "vec2",
+        "body": [
+            "vector<vector<${1:int}>> ${2:grid}(${3:H}, vector<${1:int}>(${4:W}));"
+        ],
+        "description": "2D vector grid[H][W]"
+    },
+    "Output Yes": {
+        "prefix": "Yes",
+        "body": [
+            "cout << \"Yes\" << endl;"
+        ],
+        "description": "Yesと出力"
+    },
+    "Output No": {
+        "prefix": "No",
+        "body": [
+            "cout << \"No\" << endl;"
+        ],
+        "description": "Noと出力"
+    },
+    "Output YES": {
+        "prefix": "YES",
+        "body": [
+            "cout << \"YES\" << endl;"
+        ],
+        "description": "YESと出力"
+    },
+    "Output NO": {
+        "prefix": "NO",
+        "body": [
+            "cout << \"NO\" << endl;"
+        ],
+        "description": "NOと出力"
+    },
+    "AtCoder Library": {
+        "prefix": "atcoder",
+        "body": [
+            "#include <atcoder/all>",
+            "using namespace atcoder;"
+        ],
+        "description": "AtCoder Library (ACL)のインクルード"
+    },
+    "Safe Division (ceil/floor)": {
+        "prefix": "safediv",
+        "body": [
+            "long long ceil_div(long long num, long long den) {",
+            "    if (den < 0) { num = -num; den = -den; }",
+            "    if (num >= 0) return (num + den - 1) / den;",
+            "    return num / den;",
+            "}",
+            "",
+
+            "long long floor_div(long long num, long long den) {",
+            "    if (den < 0) { num = -num; den = -den; }",
+            "    if (num >= 0) return num / den;",
+            "    return (num - den + 1) / den;",
+            "}"
+        ],
+        "description": "安全な切り上げ・切り捨て除算 (負の数対応)"
+    }
+}
+
+---
+title: 競プロ用テンプレート(C++)
+tags: C++
+author: rmp
+slide: false
+---
+## 最初のincludeとか
+```cpp:標準
+#include <bits/stdc++.h>
+using namespace std;
+int main(){
+    
+}
+```
+```cpp:多倍長整数
+#include <boost/multiprecision/cpp_int.hpp>
+using namespace boost::multiprecision;
+int main(){
+    
+}
+```
+多倍長整数を使うときは`cpp_int`で整数を定義する。
+Piaza.ioでは使えない。
+
+```cpp:PBDS(header)
+#include <ext/pb_ds/assoc_container.hpp>
+#include <ext/pb_ds/tree_policy.hpp>
+using namespace __gnu_pbds;
+
+// set(重複なし)
+template<typename T>
+using ordered_set = tree<
+    T, 
+    null_type, 
+    less<T>, 
+    rb_tree_tag, 
+    tree_order_statistics_node_update
+>;
+
+// multiset(重複あり)
+template<typename T>
+using ordered_multiset = tree<
+    pair<T, int>, 
+    null_type, 
+    less<pair<T, int>>, 
+    rb_tree_tag, 
+    tree_order_statistics_node_update
+>;
+
+int main(){
+    ordered_set<int> st; // set
+    ordered_multiset<int> ms; // multiset
+
+    // 要素の追加 O(logN)
+    st.insert(val);
+
+    int id=0;
+    ms.insert({val,id++});
+
+    // 要素の削除 O(logN)
+    st.erase(val);
+
+    auto it = ms.lower_bound({val, -1});
+    if(it!=ms.end()&&it->first==val)ms.erase(it);
+
+    // k番目の要素のイテレータの取得O(logN)
+    auto it = st.find_by_order(k);
+    // 値の取得は`*`をつける
+    int val = *st.find_by_order(k);
+
+    auto it = ms.find_by_order(k);
+    // 値の取得は`*`をつける
+    int val = it->first;
+    
+}
+
+```
+`PBDS`の`tree`パラメータについて
+tree<キーの型, 値の型, 比較関数, 木の種類, 追加機能のポリシー>
+値の型は`null_type`にすることでsetとして扱っている。
+比較関数を`greater<T>`にすることで降順にできる。
+
+
+0-indexedであることに注意！！
+
+
+## 64,128ビット整数
+```cpp:64bit型
+int64_t
+long long
+```
+```cpp:128bit型
+__int128 
+```
+演算で片方だけ普通のint使ってWAに気を付けて(1敗)
+キャストこわい
+
+## 配列
+```cpp:2次元配列
+vector<vector<int>> data(H, vector<int>(W));
+```
+```cpp:3次元配列
+vector<vector<vector<int>>> data(3, vector<vector<int>>(H, vector<int>(W)));
+```
+```cpp:10^8~9*10^8までの階乗(MOD 998244353)
+vector<int> factorial={1,808258749,117153405,761699708,573994984,62402409,511621808,242726978,887890124,875880304,0};
+```
+
+## 関数"とか"
+```cpp:桁数の取得(自然数)
+int digit(int x){
+    return to_string(x).length();
+}
+```
+```cpp:桁数の取得(整数)
+int digit(int x){
+    x=abs(x);
+    return (x == 0) ? 1 : static_cast<int>(log10(x)) + 1;
+}
+```
+```cpp:最大公約数の取得
+ll GCD(ll x,ll y){
+    if(y==0)return x;
+    else return GCD(y,x%y);
+}
+```
+`ll`の定義忘れずに
+```cpp:文字を数値化,数値を文字化
+static_cast<int>(string);
+static_cast<char>(int);
+```
+100みたいな数値をa,b,cみたいな文字にできる
+```cpp:配列の最大値
+*max_element(A.begin(),A.end())
+```
+括弧内には何も入れなくていいよ
+```cpp:桁数を指定して出力
+cout<<fixed<<setprecision(桁数);
+```
+```cpp:std::size_tをintにする
+(int)data.size();
+```
+```cpp:priority_queueで小さい順
+priority_queue<int,vector<int>, greater<int>> pq;
+```
+```cpp:絶対値でsort
+sort(v.begin(),v.end(),[](int a,int b){
+    return abs(a)<abs(b);
+});
+```
+```cpp:2次元配列の特定のキーでソート
+ sort(myVec.begin(),myVec.end(),[](const vector<int> &alpha,const vector<int> &beta){return alpha[0]<beta[0];});
+```
+配列の型に合わせて`int`の部分を変えてね
+```cpp:エラトステネスの篩(素数列挙)
+vector<bool> sieve(int x){
+    vector<bool> isPrime(x+1,true);
+    isPrime[0]=false;
+    isPrime[1]=false;
+    for(int i=4;i<=x;i+=2){
+        isPrime[i]=false;
+    }
+    for(int i=3;i*i<=x;i+=2){
+        if(isPrime[i]){
+            int save=i*i;
+            while(save<=x){
+                isPrime[save]=false;
+                save+=i;
+            }
+        }
+    }
+    return isPrime;
+}
+```
+```cpp:逆元(mod<2はだめ)
+long long modpow(long long a,long long n,long long mod){
+    long long res=1;
+    a%=mod;
+    while(n>0){
+        if(n&1)res=res*a%mod;
+        a=a*a%mod;
+        n>>=1;
+    }
+    return res;
+}
+
+long long modinv(long long a,long long mod){
+    return modpow(a,mod-2,mod);
+}
+```
+```cpp:組み合わせ論(C,P,H)
+const long long MOD=998244353;
+
+struct COM{
+    vector<long long> fact,ifact;
+
+    long long modpow(long long a,long long n,long long mod){
+        long long res=1;
+        a%=mod;
+        while(n>0){
+            if(n&1)res=res*a%mod;
+            a=a*a%mod;
+            n>>=1;
+        }
+        return res;
+    }
+
+    long long modinv(long long a,long long mod){
+        return modpow(a,mod-2,mod);
+    }
+
+    COM(int n):fact(n+1),ifact(n+1){
+        fact[0]=1;
+        for(int i=1;i<=n;i++)fact[i]=(fact[i-1]*i)%MOD;
+        ifact[n]=modinv(fact[n],MOD);
+        for(int i=n-1;i>=0;i--)ifact[i]=(ifact[i+1]*(i+1))%MOD;
+    }
+
+    long long nCk(int n,int k){
+        if(k<0||n<k)return 0;
+        return fact[n]*ifact[k]%MOD*ifact[n-k]%MOD;
+    }
+    long long nPr(int n,int k){
+        if(k<0||n<k)return 0;
+        return fact[n]*ifact[n-k]%MOD;
+    }
+    long long nHr(int n,int k){
+        if(n==0&&k==0)return 1;
+        return nCk(n+k-1,k);
+    }
+};
+
+
+int main(){
+    COM com(20000); //最大値を決める
+    int n,k;
+    
+    com.nCk(n,k);
+}
+```
+`MOD`の値に一応注意
+`n<k`のとき`nCk=0`にしてる
+`COM com(N)`のとき、
+$N = 10^6$ (100万):$16 \times 10^6 \text{ B} \approx \mathbf{15 \text{ MB}}$ （余裕）
+$N = 10^7$ (1000万):$16 \times 10^7 \text{ B} \approx \mathbf{152 \text{ MB}}$ （256MB制限ならOK）
+$N = 10^8$ (1億):$16 \times 10^8 \text{ B} \approx \mathbf{1.5 \text{ GB}}$ （通常の制限を超える）
+$10^7$ぐらいなら何も考えなくてOK
+
+<details><summary>セグメント木(最大値)</summary>
+
+```cpp:セグメント木
+#include <bits/stdc++.h>
+using namespace std;
+using ll=long long;
+
+const int MIN_INF=-2147483648; //-(2^31-1)
+
+struct SegTree{
+    // ノード番号は1-index、外は0-index
+    int sz;
+    vector<int> tree;
+
+    SegTree(int n){
+        sz=1;
+        while(sz<n)sz*=2;
+        tree.resize(2*sz,MIN_INF);
+    }
+
+    void update(int idx,int val){
+        idx+=sz;
+        tree[idx]=val;
+        while(idx>1){
+            idx/=2;
+            tree[idx]=max(tree[idx*2],tree[idx*2+1]);
+        }
+    }
+
+    // a,b: 要求区間 [a,b)
+    // l,r: 現在のノードの担当区間 [l,r)
+    // k: 現在のノード番号
+    int query(int a,int b,int l,int r,int k){
+        if(r<=a||b<=l)return MIN_INF;
+        if(a<=l&&r<=b)return tree[k];
+        int mid=(l+r)/2;
+        int vl=query(a,b,l,mid,2*k);
+        int vr=query(a,b,mid,r,2*k+1);
+        return max(vl,vr);
+    }
+
+    // a,b: 要求区間 [a,b)
+    int query(int a,int b){
+        return query(a,b,0,sz,1);
+    }
+};
+
+int main(){
+    int n,q;
+    cin>>n>>q;
+    SegTree st(n);
+
+    for(int i=0;i<q;i++){
+        int com,x,y;
+        cin>>com>>x>>y;
+        if(com)cout<<st.query(x,y+1)<<endl;
+        else st.update(x,y);
+    }
+}
+
+
+```
+</details>
+
+<details><summary>セグメント木(最小値)</summary>
+
+```cpp:セグメント木
+#include <bits/stdc++.h>
+using namespace std;
+using ll=long long;
+
+const int INF=2147483647; //-(2^31-1)
+
+struct SegTree{
+    // ノード番号は1-index、外は0-index
+    int sz;
+    vector<int> tree;
+
+    SegTree(int n){
+        sz=1;
+        while(sz<n)sz*=2;
+        tree.resize(2*sz,INF);
+    }
+
+    void update(int idx,int val){
+        idx+=sz;
+        tree[idx]=val;
+        while(idx>1){
+            idx/=2;
+            tree[idx]=min(tree[idx*2],tree[idx*2+1]);
+        }
+    }
+
+    // a,b: 要求区間 [a,b)
+    // l,r: 現在のノードの担当区間 [l,r)
+    // k: 現在のノード番号
+    int query(int a,int b,int l,int r,int k){
+        if(r<=a||b<=l)return INF;
+        if(a<=l&&r<=b)return tree[k];
+        int mid=(l+r)/2;
+        int vl=query(a,b,l,mid,2*k);
+        int vr=query(a,b,mid,r,2*k+1);
+        return min(vl,vr);
+    }
+
+    // a,b: 要求区間 [a,b)
+    int query(int a,int b){
+        return query(a,b,0,sz,1);
+    }
+};
+
+int main(){
+    int n,q;
+    cin>>n>>q;
+    SegTree st(n);
+
+    for(int i=0;i<q;i++){
+        int com,x,y;
+        cin>>com>>x>>y;
+        if(com)cout<<st.query(x,y+1)<<endl;
+        else st.update(x,y);
+    }
+}
+
+
+```
+</details>
+
+<details><summary>セグメント木(区間和)</summary>
+
+```cpp:セグメント木
+#include <bits/stdc++.h>
+using namespace std;
+using ll=long long;
+
+struct SegTree{
+    // ノード番号は1-index、外は0-index
+    int sz;
+    vector<ll> tree;
+
+    SegTree(int n){
+        sz=1;
+        while(sz<n)sz*=2;
+        tree.resize(2*sz,0);
+    }
+
+    // 元の値を"変更"するとき
+    void update(int idx,int val){
+        idx+=sz;
+        tree[idx]=val;
+        while(idx>1){
+            idx/=2;
+            tree[idx]=tree[idx*2]+tree[idx*2+1];
+        }
+    }
+
+    // 元の値に"加算"する場合
+    void add(int idx,int val){
+        idx+=sz;
+        tree[idx]+=val;
+        while(idx>1){
+            idx/=2;
+            tree[idx]=tree[idx*2]+tree[idx*2+1];
+        }
+    }
+
+    // a,b: 要求区間 [a,b)
+    // l,r: 現在のノードの担当区間 [l,r)
+    // k: 現在のノード番号
+    ll query(int a,int b,int l,int r,int k){
+        if(r<=a||b<=l)return 0;
+        if(a<=l&&r<=b)return tree[k];
+        int mid=(l+r)/2;
+        ll vl=query(a,b,l,mid,2*k);
+        ll vr=query(a,b,mid,r,2*k+1);
+        return vl+vr;
+    }
+
+    // a,b: 要求区間 [a,b)
+    ll query(int a,int b){
+        return query(a,b,0,sz,1);
+    }
+};
+
+int main(){
+    int n,q;
+    cin>>n>>q;
+    SegTree st(n);
+
+    for(int i=0;i<q;i++){
+        int com,x,y;
+        cin>>com>>x>>y;
+        if(com)cout<<st.query(x,y+1)<<endl;
+        else st.update(x,y);
+    }
+}
+
+
+```
+</details>
+
+```cpp:ACLの遅延セグメント木メモ
+seg.apply(L, R, val): // 範囲に`mapping`で定義した`f`を適用する
+
+seg.get(idx): // i番目の値を返す
+seg.set(idx,val): // i番目の値をxに書き換える
+
+seg.prod(L, R): // 範囲のmaxとかminとかsumを出す
+
+// 0-indexed
+// すべて半開区間 [L, R)
+//二分探索ができる関数もあるけど難しいので省略
+// AIに聞いただけで確認はしてない
+```
+
+## 簡単な高速化(理解できてない)
+```cpp:最初に貼るとなんか速くなる
+# pragma GCC target("avx2")
+# pragma GCC optimize("O3")
+# pragma GCC optimize("unroll-loops")
+```
+```cpp:cout,cinの高速化
+int main(){
+    ios::sync_with_stdio(false);
+    std::cin.tie(nullptr);
+    
+}
+```
+
+## よくある構文
+```cpp:3種類のクエリ
+    for(int i=0;i<Q;i++){
+        cin>>check;
+        if(check==1){
+            
+        }
+        else if(check==2){
+            
+        }
+        else{
+            
+        }
+    }
+```
+## 式変形
+###### ヴァンデルモンドの畳み込み
+$$
+\sum_{i=0}^{k} \binom{N}{i} \binom{M}{k-i} = \binom{N+M}{k}
+$$
+
+###### modの変換
+$$
+i \bmod j = i - j \cdot \left\lfloor \frac{i}{j} \right\rfloor
+$$
+
+## コーナケース
+`lower_bound`、`upper_bound`で探索する値が見つからなかったとき、`v.begin()`か`v.end()`が返ってくる。`v.end()`のときは配列外参照に注意。
+
+## ミスを書いとく
+`max`関数を使うとき、引数の型が違った(`int`と`ll`)
+dp用の配列の大きさが不適だった
+`map`を使うとき変数名ではなく`"map[s]=="`みたいにしちゃった
+余りを求める問題で引き算して負の値
+`map`を使うときに変数名をmapにしておかしくなった
+除算による誤差の影響で必ずしも`(ng+ok)/2==ng/2+ok/2`にはならない。
+二分探索に限り、誤差があっても計算結果は`ok`と`ng`の間になるから`ng + (ok - ng)/2`なら安全で除算の誤差も問題ない
+`for`文の`==`が`=`になってた
+引数で`++`を使って未定義動作
+`std::sort`の比較関数で`<=`,`>=`を使ってsegmentation faultや無限ループ
+
+## 発想的なもの
+`nCr`の計算で$n\leq10^9$でも、計算する二項係数の`r`の総和が小さかったら愚直計算でOK
+
+根付き木を下から見るときは、DFSの帰りがけ順でOK
