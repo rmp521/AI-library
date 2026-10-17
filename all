@@ -1,0 +1,2035 @@
+#include <bits/stdc++.h>
+using namespace std;
+
+// 0-indexedであることに注意1
+// 0-indexedであることに注意2
+
+// 番号付けはDFS内で行われるから、入力順はバラバラでもいい
+// 入力ではつなぎ方さえ分かればいい
+
+struct EulerTour{
+    int n; // 頂点数
+    vector<vector<int>> g; // 隣接リスト
+
+    // LCA(最小共通祖先)用
+    vector<int> tour;      // DFSの頂点の軌跡
+    vector<int> depth;     // 頂点の深さ
+    vector<int> in;        // DFSで初めて見たときのtourのindex
+    vector<int> out;       // DFSを抜けたときのtourのindex
+
+    vector<vector<int>> sp_table; // Sparse Table用の配列
+
+    // 配列のサイズをNに初期化
+    EulerTour(int n):n(n),g(n),depth(n),in(n),out(n){}
+
+    void add_edge(int u,int v){
+        g[u].push_back(v);
+        g[v].push_back(u);
+    }
+
+    // v: 現在の頂点  p: 親の頂点  d: 現在の深さ
+    // O(N)
+    void dfs(int v,int p,int d){
+        depth[v]=d;        // 深さを記録
+        in[v]=tour.size(); // 初めて訪れたときのtourのindexを記録
+        tour.push_back(v); // 軌跡を追加
+        
+        for(auto u:g[v]){
+            if(u==p)continue; // 親に戻ることを防止
+            dfs(u,v,d+1);
+            tour.push_back(v);
+        }
+
+        out[v]=tour.size();
+    }
+
+    // Sparse Tableを構築する関数
+    // O(NlogN)
+    void build_rmq(){
+        int sz=tour.size();
+
+        int max_log=32-__builtin_clz(sz); // GCC拡張の機能 31-(最上位セットビット)+1をしてる
+        // int max_log=32-bit_width((unsigned int)sz); C++20の機能　31-(最上位セットビット)+1をしてる
+
+        sp_table.assign(max_log,vector<int> (sz));
+
+        // Sparse Tableの構築
+        for(int i=0;i<sz;i++){
+            sp_table[0][i]=tour[i];
+        }
+
+        for(int k=1;k<max_log;k++){
+            for(int i=0;i+(1<<k)<=sz;i++){
+                int u=sp_table[k-1][i];
+                int v=sp_table[k-1][i+(1<<(k-1))];
+                
+                if(depth[u]<depth[v])sp_table[k][i]=u;
+                else sp_table[k][i]=v;
+            }
+        }
+    }
+
+    // tour,depth,sp_tableの構築用
+    // 根が0じゃなかったら引数に入れる
+    // 根が0なら引数なしでOK
+    // O(NlogN)
+    void build(int root=0){
+            dfs(root,-1,0);
+        build_rmq();
+    }
+
+    // 頂点u と頂点v のLCA(最小共通祖先)を求める
+    // O(1)
+    int lca(int u,int v){
+        int l=in[u];
+        int r=in[v];
+
+        // l<=r となるようにする
+        if(l>r)swap(l,r);
+
+        // Sparse Tableにおける区間の長さ
+        int len=r-l+1;
+
+        // Sparse Tableのために、最大の 2^k < len を求める
+        int k=31-__builtin_clz(len);
+        // int k=31-bit_width((unsigned int)len);
+
+        // Sparse Tableで区間の最小値を求める
+        int node1=sp_table[k][l];
+        int node2=sp_table[k][r-(1<<k)+1];
+
+        if(depth[node1]<depth[node2])return node1;
+        else return node2;
+    }
+
+    // 頂点u と頂点v の距離を求める
+    // O(1)
+    int dist(int u,int v){
+        return depth[u]+depth[v]-2*depth[lca(u,v)];
+    }
+
+    // 任意の頂点配列をDFSの訪問順にsort
+    // O(NlogN)
+    void DFSsort(vector<int> &vec){
+        sort(vec.begin(),vec.end(),[&](int a,int b){
+            return in[a]<in[b];
+        });
+    }
+
+    // 訪問順でsortした配列上のlower_bound
+    // 訪問時間が time 以上になる最初のindexを返す
+    // 返り値がイテレータでないことに注意!
+    // O(log|vec|)
+    int lower_bound_tour(const vector<int> &vec,int time){
+        auto it=lower_bound(vec.begin(),vec.end(),time,
+            [&](int a,int val){return in[a]<val;}
+        );
+        return it-vec.begin();
+    }
+
+    // 訪問順でsortした配列上のupper_bound
+    // 訪問時間が time より大きいになる最初のindexを返す
+    // 返り値がイテレータでないことに注意!
+    // O(log|vec|)
+    int upper_bound_tour(const vector<int> &vec,int time){
+        auto it=upper_bound(vec.begin(),vec.end(),time,
+            [&](int val,int a){return val<in[a];} // lower_bound と引数の順番が違うけどこれでOKです(たぶん)
+        );
+        return it-vec.begin();
+    }
+
+    // 訪問時刻が[l_time,r_time) の範囲に含まれる頂点の個数を返す
+    // sort済み配列に対して行う
+    //O(log|vec|)
+    int count_range(const vector<int> &vec,int l_time,int r_time){
+        if(vec.empty())return 0;
+
+        int l_idx=lower_bound_tour(vec,l_time);
+        int r_idx=lower_bound_tour(vec,r_time);
+
+        return r_idx-l_idx;
+    }
+
+    // 頂点u が頂点v の祖先であるか判定
+    // O(1)
+    bool is_ancestor(int u,int v){
+        return in[u]<=in[v] && out[v]<=out[u];
+    }
+
+    //頂点x が頂点u と頂点v の最短パス上に存在するか判定
+    // O(1)
+    bool is_on_path(int u,int v,int x){
+        return dist(u,x)+dist(x,v)==dist(u,v);
+    }
+};
+
+
+// ===============ここからmain関数===============
+int main(){
+    // 0-indexed に注意←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←
+
+    int N; // N: 頂点数
+    cin>>N;
+
+    // 頂点の数を渡す
+    EulerTour et(N);
+
+    // 辺の追加
+    // ループ範囲に注意
+    for(int i=1;i<N;i++){
+        int u,v;
+        cin>>u>>v;
+        et.add_edge(u,v);
+    }
+
+    // Euler Tourの前計算
+    //これ絶対にやる←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←
+    // O(NlogN)
+    et.build();
+    // 根が0でない場合は et.build(root); root: 根のindex
+
+    int u,v;         // u,v: 木の頂点
+    vector<int> vec; // vec: 頂点の配列
+
+
+    // 頂点u と頂点v の距離を求める
+    int d=et.dist(u,v);
+
+    // 頂点u と頂点v のLCA(最小共通祖先)を求める
+    int idx=et.lca(u,v);
+
+    // 任意の頂点配列をDFSの訪問順にsort
+    // O(NlogN)
+    et.DFSsort(vec);
+
+
+    int time;
+    // 訪問順でsortした配列上のlower_bound
+    // 訪問時間が time 以上になる最初のindexを返す
+    // 返り値がイテレータでないことに注意!
+    // O(log|vec|)
+    et.lower_bound_tour(vec,time);
+
+    // 訪問順でsortした配列上のupper_bound
+    // 訪問時間が time より大きいになる最初のindexを返す
+    // 返り値がイテレータでないことに注意!
+    // O(log|vec|)
+    et.upper_bound_tour(vec,time);
+
+    // 訪問時刻が[l_time,r_time) の範囲に含まれる頂点の個数を返す
+    // sort済み配列に対して行う
+    //O(log|vec|)
+    et.count_range(vec,et.in[u],et.out[u]);
+    // in配列,out配列をこのように使うことでuの部分木の個数が分かる
+
+
+    // 頂点u が頂点v の祖先であるか判定
+    // O(1)
+    if(et.is_ancestor(u,v)){};
+    // true -> uはvの祖先
+
+    int x; // x: 木の頂点
+    //頂点x が頂点u と頂点v の最短パス上に存在するか判定
+    // O(1)
+    if(et.is_on_path(u,v,x)){};
+    // true -> xはuとvの最短パス上に存在する
+}
+
+/*
+よくあるミスを書いておく
+
+・EulerTour et(N-1); みたいに、頂点数を間違えてる
+・0-indexed にしてない
+・cin する前に`--`してる
+・build してない
+・辺を追加するときのループ範囲
+・sort する前に二分探索やcount_range
+
+*/
+
+#include <bits/stdc++.h>
+using namespace std;
+
+// 0-indexedであることに注意1
+// 0-indexedであることに注意2
+
+// 番号付けはDFS内で行われるから、入力順はバラバラでもいい
+// 入力ではつなぎ方さえ分かればいい
+
+// 辺を表す構造体
+struct Edge{
+    int to;
+    long long cost;
+};
+
+struct EulerTour{
+    int n; // 頂点数
+    vector<vector<Edge>> g; // 隣接リスト
+
+    // LCA(最小共通祖先)用
+    vector<int> tour;      // DFSの頂点の軌跡
+    vector<int> depth;     // 頂点の深さ
+    vector<int> in;        // DFSで初めて見たときのtourのindex
+    vector<int> out;       // DFSを抜けたときのtourのindex
+
+    // 根からの重みつき距離
+    vector<long long> dist_root;
+
+    vector<vector<int>> sp_table; // Sparse Table用の配列
+
+    // 配列のサイズをNに初期化
+    EulerTour(int n):n(n),g(n),depth(n),in(n),out(n),dist_root(n){}
+
+    void add_edge(int u,int v,long long cost){
+        g[u].push_back({v,cost});
+        g[v].push_back({u,cost});
+    }
+
+    // v: 現在の頂点  p: 親の頂点  d: 現在の深さ
+    // O(N)
+    void dfs(int v,int p,int d,long long w){
+        depth[v]=d;        // 深さを記録
+        in[v]=tour.size(); // 初めて訪れたときのtourのindexを記録
+        tour.push_back(v); // 軌跡を追加
+        dist_root[v]=w;    // 重みつき距離を記録
+        
+        for(auto e:g[v]){
+            if(e.to==p)continue; // 親に戻ることを防止
+            dfs(e.to,v,d+1,w+e.cost);
+            tour.push_back(v);
+        }
+
+        out[v]=tour.size();
+    }
+
+    // Sparse Tableを構築する関数
+    // O(NlogN)
+    void build_rmq(){
+        int sz=tour.size();
+
+        int max_log=32-__builtin_clz(sz); // GCC拡張の機能 31-(最上位セットビット)+1をしてる
+        // int max_log=32-bit_width((unsigned int)sz); C++20の機能　31-(最上位セットビット)+1をしてる
+
+        sp_table.assign(max_log,vector<int> (sz));
+
+        // Sparse Tableの構築
+        for(int i=0;i<sz;i++){
+            sp_table[0][i]=tour[i];
+        }
+
+        for(int k=1;k<max_log;k++){
+            for(int i=0;i+(1<<k)<=sz;i++){
+                int u=sp_table[k-1][i];
+                int v=sp_table[k-1][i+(1<<(k-1))];
+                
+                if(depth[u]<depth[v])sp_table[k][i]=u;
+                else sp_table[k][i]=v;
+            }
+        }
+    }
+
+    // tour,depth,sp_tableの構築用
+    // 根が0じゃなかったら引数に入れる
+    // 根が0なら引数なしでOK
+    // O(NlogN)
+    void build(int root=0){
+            dfs(root,-1,0,0LL);
+        build_rmq();
+    }
+
+    // 頂点u と頂点v のLCA(最小共通祖先)を求める
+    // O(1)
+    int lca(int u,int v){
+        int l=in[u];
+        int r=in[v];
+
+        // l<=r となるようにする
+        if(l>r)swap(l,r);
+
+        // Sparse Tableにおける区間の長さ
+        int len=r-l+1;
+
+        // Sparse Tableのために、最大の 2^k < len を求める
+        int k=31-__builtin_clz(len);
+        // int k=31-bit_width((unsigned int)len);
+
+        // Sparse Tableで区間の最小値を求める
+        int node1=sp_table[k][l];
+        int node2=sp_table[k][r-(1<<k)+1];
+
+        if(depth[node1]<depth[node2])return node1;
+        else return node2;
+    }
+
+    // 頂点u と頂点v の"重み付き"距離を求める
+    // O(1)
+    long long dist(int u,int v){
+        return dist_root[u]+dist_root[v]-2LL*dist_root[lca(u,v)];
+    }
+
+    // 頂点u と頂点v の"重みなし"距離を求める
+    // O(1)
+    int unweighted_dist(int u,int v){
+        return depth[u]+depth[v]-2*depth[lca(u,v)];
+    }
+
+    // 任意の頂点配列をDFSの訪問順にsort
+    // O(NlogN)
+    void DFSsort(vector<int> &vec){
+        sort(vec.begin(),vec.end(),[&](int a,int b){
+            return in[a]<in[b];
+        });
+    }
+
+    // 訪問順でsortした配列上のlower_bound
+    // 訪問時間が time 以上になる最初のindexを返す
+    // 返り値がイテレータでないことに注意!
+    // O(log|vec|)
+    int lower_bound_tour(const vector<int> &vec,int time){
+        auto it=lower_bound(vec.begin(),vec.end(),time,
+            [&](int a,int val){return in[a]<val;}
+        );
+        return it-vec.begin();
+    }
+
+    // 訪問順でsortした配列上のupper_bound
+    // 訪問時間が time より大きいになる最初のindexを返す
+    // 返り値がイテレータでないことに注意!
+    // O(log|vec|)
+    int upper_bound_tour(const vector<int> &vec,int time){
+        auto it=upper_bound(vec.begin(),vec.end(),time,
+            [&](int val,int a){return val<in[a];} // lower_bound と引数の順番が違うけどこれでOKです(たぶん)
+        );
+        return it-vec.begin();
+    }
+
+    // 訪問時刻が[l_time,r_time) の範囲に含まれる頂点の個数を返す
+    // sort済み配列に対して行う
+    //O(log|vec|)
+    int count_range(const vector<int> &vec,int l_time,int r_time){
+        if(vec.empty())return 0;
+
+        int l_idx=lower_bound_tour(vec,l_time);
+        int r_idx=lower_bound_tour(vec,r_time);
+
+        return r_idx-l_idx;
+    }
+
+    // 頂点u が頂点v の祖先であるか判定
+    // O(1)
+    bool is_ancestor(int u,int v){
+        return in[u]<=in[v] && out[v]<=out[u];
+    }
+
+    //頂点x が頂点u と頂点v の最短パス上に存在するか判定
+    // O(1)
+    bool is_on_path(int u,int v,int x){
+        return unweighted_dist(u,x)+unweighted_dist(x,v)==unweighted_dist(u,v);
+    }
+};
+
+
+// ===============ここからmain関数===============
+int main(){
+    // 0-indexed に注意←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←
+
+    int N; // N: 頂点数
+    cin>>N;
+
+    // 頂点の数を渡す
+    EulerTour et(N);
+
+    // 辺の追加
+    // ループ範囲に注意
+    for(int i=1;i<N;i++){
+        int u,v;
+        long long cost;
+        cin>>u>>v>>cost;
+        et.add_edge(u,v,cost);
+    }
+
+    // Euler Tourの前計算
+    //これ絶対にやる←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←
+    // O(NlogN)
+    et.build();
+    // 根が0でない場合は et.build(root); root: 根のindex
+
+    int u,v;         // u,v: 木の頂点
+    vector<int> vec; // vec: 頂点の配列
+
+    // 頂点u と頂点v の"重みつき"距離を求める
+    long long d=et.dist(u,v);
+
+    // 頂点u と頂点v の"重みなし"距離を求める
+    int d=et.unweighted_dist(u,v);
+
+    // 頂点u と頂点v のLCA(最小共通祖先)を求める
+    int idx=et.lca(u,v);
+
+    // 任意の頂点配列をDFSの訪問順にsort
+    // O(NlogN)
+    et.DFSsort(vec);
+
+
+    int time;
+    // 訪問順でsortした配列上のlower_bound
+    // 訪問時間が time 以上になる最初のindexを返す
+    // 返り値がイテレータでないことに注意!
+    // O(log|vec|)
+    et.lower_bound_tour(vec,time);
+
+    // 訪問順でsortした配列上のupper_bound
+    // 訪問時間が time より大きいになる最初のindexを返す
+    // 返り値がイテレータでないことに注意!
+    // O(log|vec|)
+    et.upper_bound_tour(vec,time);
+
+    // 訪問時刻が[l_time,r_time) の範囲に含まれる頂点の個数を返す
+    // sort済み配列に対して行う
+    //O(log|vec|)
+    et.count_range(vec,et.in[u],et.out[u]);
+    // in配列,out配列をこのように使うことでuの部分木の個数が分かる
+
+
+    // 頂点u が頂点v の祖先であるか判定
+    // O(1)
+    if(et.is_ancestor(u,v)){};
+    // true -> uはvの祖先
+
+    int x; // x: 木の頂点
+    //頂点x が頂点u と頂点v の最短パス上に存在するか判定
+    // O(1)
+    if(et.is_on_path(u,v,x)){};
+    // true -> xはuとvの最短パス上に存在する
+}
+
+/*
+よくあるミスを書いておく
+
+・EulerTour et(N-1); みたいに、頂点数を間違えてる
+・0-indexed にしてない
+・cin する前に`--`してる
+・build してない
+・辺を追加するときのループ範囲
+・sort する前に二分探索やcount_range
+
+*/
+
+#include <bits/stdc++.h>
+using namespace std;
+using ll=long long;
+
+// Tに好きな型を入れる(int とか)(main関数内で変える)
+template <typename T>
+struct FenwickTree{
+    // 
+    int n;
+    vector<T> tree;
+
+    // 1-indexだから0入れないでね
+    FenwickTree(int n):n(n),tree(n+1,0){}
+
+    //　一点加算
+    void add(int idx,T val){
+        for(;idx<=n;idx+=idx&-idx){
+            tree[idx]+=val;
+        }
+        return;
+    }
+
+    // 累積和取得
+    T sum(int idx){
+        // 範囲外ストッパー
+        // ここのせいでREがWAとして処理されてるかもしれないから注意
+        if(idx<=0)return 0;
+        idx=min(idx,n);
+        
+        T res=0;
+        for(;idx>0;idx-=idx&-idx){
+            res+=tree[idx];
+        }
+        return res;
+    }
+
+    // 区間和取得(実質累積和)
+    // [l,r](閉区間)の累積和
+    // lに0は入らない前提でやってる(0-indexだから)
+    T query(int l,int r){
+        return sum(r)-sum(l-1);
+    }
+
+    // k番目に小さい値のインデックスを取得
+    // BITの中に頻度（0以上の値）を入れている場合のみ使用可能
+    // 追加は add(idx,1) 、削除は add(idx,-1)
+
+    // O(log n)
+    // 1-indexed
+    int kth(T k){
+        if(k<=0)return 0;
+        int place=0;
+        T current_sum=0;
+
+        // n以下の最大の2冪を求める
+        int d=1;
+        while(d<=n)d*=2;
+        d/=2;
+
+        // resとcurrent_sumを作る
+        for(int i=d;i>0;i/=2){
+            if(place+i<=n&&current_sum+tree[place+i]<k){
+                current_sum+=tree[place+i];
+                place+=i;
+            }
+        }
+        return place+1;
+    }
+};
+
+int main(){
+    int N;
+    cin>>N;
+    FenwickTree<ll> ft(N);
+}
+
+#include <bits/stdc++.h>
+using namespace std;
+using ll=long long;
+
+// Tに好きな型を入れる(int とか)(main関数内で変える)
+template <typename T>
+struct FenwickTree{
+    // 
+    int n;
+    vector<T> tree;
+
+    // 1-indexだから0入れないでね
+    FenwickTree(int n):n(n),tree(n+1,0){}
+
+    //　一点加算
+    void add(int idx,T val){
+        for(;idx<=n;idx+=idx&-idx){
+            tree[idx]+=val;
+        }
+        return;
+    }
+
+    // 累積和取得
+    T sum(int idx){
+        // 範囲外ストッパー
+        // ここのせいでREがWAとして処理されてるかもしれないから注意
+        if(idx<=0)return 0;
+        idx=min(idx,n);
+
+        T res=0;
+        for(;idx>0;idx-=idx&-idx){
+            res+=tree[idx];
+        }
+        return res;
+    }
+
+    // 区間和取得(実質累積和)
+    // [l,r](閉区間)の累積和
+    // lに0は入らない前提でやってる(0-indexだから)
+    T query(int l,int r){
+        return sum(r)-sum(l-1);
+    }
+};
+
+int main(){
+    int N;
+    cin>>N;
+    FenwickTree<ll> ft(N);
+}
+
+#include <bits/stdc++.h>
+using namespace std;
+
+// 単調減少でLISしたいときは、数列全体に-1を掛けてLIS、その後もう1回-1を掛ける
+
+// strict=true;  狭義単調増加
+// strict=false; 広義単調増加
+template<typename T> // 自動で型推論するので指定不要 
+// O(NlogN)で
+struct LIS{
+    int length; // LISの長さ
+    vector<T> res; // 復元されたLISの要素
+    vector<int> L; // L[i]:i番目の要素を末尾とするLISの長さ
+
+    LIS(const vector<T> &sequence,bool strict=true){
+        int n=sequence.size();
+        L.assign(n,0);
+        if(n==0){
+            length=0;
+            return;
+        }
+
+        vector<T> dp;
+        vector<int> dp_id; // dp配列に入っている要素の元のindex
+        vector<int> prev(n,-1); // 経路復元用:直前の要素のindex(存在しない場合は-1)
+
+        for(int i=0;i<n;i++){
+            const T &x=sequence[i];
+            auto it=strict ? lower_bound(dp.begin(),dp.end(),x)  // 狭義単調増加
+                           : upper_bound(dp.begin(),dp.end(),x); // 広義単調増加
+        
+            int idx=it-dp.begin();
+
+            L[i]=idx+1; // 自分が入ったdp配列のindex+1が長さ
+
+            // prevの更新
+            if(it!=dp.begin()){
+                prev[i]=dp_id[idx-1];
+            }
+
+            // dp_idの更新
+            if(it==dp.end()){
+                dp.push_back(x);
+                dp_id.push_back(i);
+            }
+            else{
+                *it=x;
+                dp_id[idx]=i;
+            }
+        }
+
+        length=dp.size();
+
+        // 経路復元
+        // LISの最後の要素のindexを取得
+        int cur=dp_id.back(); // v.back(); はvの最後の要素を取得する。dp_idにはdpのindexが入ってるからLISの最後の要素のindexが取得できる。
+
+        while(cur!=-1){
+            res.push_back(sequence[cur]);
+            cur=prev[cur];
+        }
+        reverse(res.begin(),res.end());
+    }
+};
+
+int main(){
+    int N=5;
+    vector<int> A={1,3,2,4,5};
+    LIS lis_positive(A);
+
+    auto rev_A=A;
+    reverse(rev_A.begin(),rev_A.end()); // Aを左右反転
+    for(auto &x:rev_A)x=-x; // A(rev_A)の全ての要素に-1を掛ける
+    LIS lis_negative(rev_A); // 後ろからLISをしてるのと同じ
+    
+    int len=lis_positive.length;
+
+    // x番目の要素がLISに含まれてるか確認
+    int x=1;
+    // 左右反転した配列を後ろから見た時、indexは'N-1-x'
+    if(lis_positive.L[x]+lis_negative.L[N-1-x]-1==len)cout<<"included!"<<endl;
+
+}
+
+#include <bits/stdc++.h>
+using namespace std;
+
+// 単調減少でLISしたいときは、数列全体に-1を掛けてLIS、その後もう1回-1を掛ける
+
+// strict=true;  狭義単調増加
+// strict=false; 広義単調増加
+template<typename T> // 自動で型推論するので指定不要 
+// O(NlogN)で
+int LIS(const vector<T> &sequence,bool strict=true){
+    vector<T> dp;
+
+    for(const auto &x:sequence){
+        auto it=strict ? lower_bound(dp.begin(),dp.end(),x)  // 狭義単調増加
+                       : upper_bound(dp.begin(),dp.end(),x); // 広義単調増加
+
+        if(it==dp.end())dp.push_back(x);
+        else *it=x;
+    }
+
+    return dp.size();
+}
+
+#include <bits/stdc++.h>
+using namespace std;
+
+// 単調減少でLISしたいときは、数列全体に-1を掛けてLIS、その後もう1回-1を掛ける
+
+// strict=true;  狭義単調増加
+// strict=false; 広義単調増加
+template<typename T> // 自動で型推論するので指定不要 
+// O(NlogN)で
+struct LIS{
+    int length; // LISの長さ
+    vector<T> res; // 復元されたLISの要素
+
+    LIS(const vector<T> &sequence,bool strict=true){
+        int n=sequence.size();
+        if(n==0){
+            length=0;
+            return;
+        }
+
+        vector<T> dp;
+        vector<int> dp_id; // dp配列に入っている要素の元のindex
+        vector<int> prev(n,-1); // 経路復元用:直前の要素のindex(存在しない場合は-1)
+
+        for(int i=0;i<n;i++){
+            const T &x=sequence[i];
+            auto it=strict ? lower_bound(dp.begin(),dp.end(),x)  // 狭義単調増加
+                           : upper_bound(dp.begin(),dp.end(),x); // 広義単調増加
+        
+            int idx=it-dp.begin();
+
+            // prevの更新
+            if(it!=dp.begin()){
+                prev[i]=dp_id[idx-1];
+            }
+
+            // dp_idの更新
+            if(it==dp.end()){
+                dp.push_back(x);
+                dp_id.push_back(i);
+            }
+            else{
+                *it=x;
+                dp_id[idx]=i;
+            }
+        }
+
+        length=dp.size();
+
+        // 経路復元
+        // LISの最後の要素のindexを取得
+        int cur=dp_id.back(); // v.back(); はvの最後の要素を取得する。dp_idにはdpのindexが入ってるからLISの最後の要素のindexが取得できる。
+
+        while(cur!=-1){
+            res.push_back(sequence[cur]);
+            cur=prev[cur];
+        }
+        reverse(res.begin(),res.end());
+    }
+};
+
+int main(){
+    vector<int> A={1,3,2,4,5};
+    LIS lis(A);
+    auto lisA=lis.res;
+}
+
+#include <bits/stdc++.h>
+using namespace std;
+
+// クラスカル法を用いて、
+// O(|E|log|V|) で最小全域木のコストを求める
+// 経路復元つき
+
+struct UnionFind{
+    // parent[i]>=0 -> 親の頂点番号
+    // parent[i]< 0 -> 根 (絶対値がサイズ)
+    vector<int> parent;
+
+    int group_count; // グループ数
+
+    UnionFind(int n):parent(n,-1),group_count(n){}
+
+    // 頂点xの根を求める + 経路圧縮
+    int root(int x){
+        if(parent[x]<0)return x;
+
+        parent[x]=root(parent[x]);
+        return parent[x];
+    }
+
+    // 頂点 x と y が同じグループに属するか判定
+    bool same(int x,int y){
+        return root(x)==root(y);
+    }
+
+    // 頂点 x と y のグループを併合する
+
+    bool unite(int x,int y){
+        int rx=root(x);
+        int ry=root(y);
+
+        if(rx==ry)return false;
+
+        if(-parent[rx]<-parent[ry])swap(rx,ry);
+
+        parent[rx]+=parent[ry];
+        parent[ry]=rx;
+
+        group_count--;
+
+        return true;
+    }
+
+    // x が属するグループのサイズ
+    int size(int x){
+        return -parent[root(x)];
+    }
+
+    // 現在の総グループ数
+    int count(){
+        return group_count;
+    }
+};
+
+struct Edge{
+    int u,v;
+    long long cost;
+    // 重みが小さい順にソートするための比較演算子
+    bool operator< (const Edge &other) const{
+        return cost<other.cost;
+    }
+};
+
+// 最小全域木のコストの総和を返す
+// グラフが非連結なら -1 を返す
+// O(|E|log|V|)
+
+// mst_edges は空の配列
+long long kruskal(int V,vector<Edge> &edge,vector<Edge> mst_edges){
+    // コストが小さい順に辺をソート
+    sort(edge.begin(),edge.end());
+
+    UnionFind uf(V); // 閉路判定用
+    long long total_cost=0;
+    int edge_count=0;
+
+    // コストが低い辺から閉路ができないか判定しながら追加
+    for(const auto &e:edge){
+        if(uf.unite(e.u,e.v)){
+            total_cost+=e.cost;
+            edge_count++;
+
+            // 追加した辺を保存
+            mst_edges.push_back(e);
+
+            // 頂点数 V-1 の辺を選んだ時点で終わり
+            if(edge_count==V-1)break;
+        }
+    }
+
+    // グラフが非連結の場合
+    if(V>0 && edge_count < V-1){
+        return -1;
+    }
+
+    return total_cost;
+}
+
+int main(){
+    int V,E;            // 頂点数、辺の数
+    vector<Edge> graph; // グラフ
+
+    for(int i=0;i<E;i++){
+        int u,v;
+        long long cost;
+        cin>>u>>v>>cost;
+        // 0-indexedにするなら、 u--, v--
+        graph.push_back({u,v,cost});
+    }
+
+    vector<Edge> mst_edges; // / 経路保存用の空の配列
+    // mst_edges[i]={頂点1, 頂点2, コスト}; の形式で保存される
+
+    long long ans=kruskal(V,graph,mst_edges);
+
+    if(ans==-1)cout<<"graph has no connection"<<endl;
+    else cout<<ans<<endl;
+}
+
+#include <bits/stdc++.h>
+using namespace std;
+
+// クラスカル法を用いて、
+// O(|E|log|V|) で最小全域木のコストを求める
+
+struct UnionFind{
+    // parent[i]>=0 -> 親の頂点番号
+    // parent[i]< 0 -> 根 (絶対値がサイズ)
+    vector<int> parent;
+
+    int group_count; // グループ数
+
+    UnionFind(int n):parent(n,-1),group_count(n){}
+
+    // 頂点xの根を求める + 経路圧縮
+    int root(int x){
+        if(parent[x]<0)return x;
+
+        parent[x]=root(parent[x]);
+        return parent[x];
+    }
+
+    // 頂点 x と y が同じグループに属するか判定
+    bool same(int x,int y){
+        return root(x)==root(y);
+    }
+
+    // 頂点 x と y のグループを併合する
+
+    bool unite(int x,int y){
+        int rx=root(x);
+        int ry=root(y);
+
+        if(rx==ry)return false;
+
+        if(-parent[rx]<-parent[ry])swap(rx,ry);
+
+        parent[rx]+=parent[ry];
+        parent[ry]=rx;
+
+        group_count--;
+
+        return true;
+    }
+
+    // x が属するグループのサイズ
+    int size(int x){
+        return -parent[root(x)];
+    }
+
+    // 現在の総グループ数
+    int count(){
+        return group_count;
+    }
+};
+
+struct Edge{
+    int u,v;
+    long long cost;
+    // 重みが小さい順にソートするための比較演算子
+    bool operator< (const Edge &other) const{
+        return cost<other.cost;
+    }
+};
+
+// 最小全域木のコストの総和を返す
+// グラフが非連結なら -1 を返す
+// O(|E|log|V|)
+
+long long kruskal(int V,vector<Edge> &edge){
+    // コストが小さい順に辺をソート
+    sort(edge.begin(),edge.end());
+
+    UnionFind uf(V); // 閉路判定用
+    long long total_cost=0;
+    int edge_count=0;
+
+    // コストが低い辺から閉路ができないか判定しながら追加
+    for(const auto &e:edge){
+        if(uf.unite(e.u,e.v)){
+            total_cost+=e.cost;
+            edge_count++;
+
+            // 頂点数 V-1 の辺を選んだ時点で終わり
+            if(edge_count==V-1)break;
+        }
+    }
+
+    // グラフが非連結の場合
+    if(V>0 && edge_count < V-1){
+        return -1;
+    }
+
+    return total_cost;
+}
+
+int main(){
+    int V,E;            // 頂点数、辺の数
+    vector<Edge> graph; // グラフ
+
+    for(int i=0;i<E;i++){
+        int u,v;
+        long long cost;
+        cin>>u>>v>>cost;
+        // 0-indexedにするなら、 u--, v--
+        graph.push_back({u,v,cost});
+    }
+
+    long long ans=kruskal(V,graph);
+
+    if(ans==-1)cout<<"graph has no connection"<<endl;
+    else cout<<ans<<endl;
+}
+
+#include <bits/stdc++.h>
+using namespace std;
+using ll = long long;
+
+struct Factorizer{
+    int n;
+    vector<int> spf; // spf[i] : iを割り切る最小の素数
+    vector<bool> Prime;
+
+    Factorizer(int size):n(size),spf(size+1),Prime(size+1,true){
+        for(int i=0;i<=n;i++)spf[i]=i;
+
+        if(n>=0)Prime[0]=false;
+        if(n>=1)Prime[1]=false;
+
+        for(int i=4;i<=n;i+=2){
+            Prime[i]=false;
+            spf[i]=2;
+        }
+
+        for(int i=3;i<=n/i;i+=2){
+            if(Prime[i]){
+                for(int j=i*i;j<=n;j+=i*2){
+                    Prime[j]=false;
+                    if(spf[j]==j)spf[j]=i;
+                }
+            }
+        }
+    }
+
+    // O(logN)
+    vector<pair<int,int>> factorize(int x) const{
+        vector<pair<int,int>> res;
+        while(x>1){
+            int p=spf[x];
+            int exp=0;
+            while(spf[x]==p){
+                exp++;
+                x/=p;
+            }
+            res.push_back({p,exp});
+        }
+        return res;
+    }
+};
+
+int main(){
+    int MAX_VAL;
+
+    // 最大の数を決めて前計算
+    // 10^7 ぐらいが限度
+    Factorizer fact(MAX_VAL);
+
+    // 素因数分解
+    // 戻り値は {素因数, 指数} のpairのvector
+    int x;
+    vector<pair<int,int>> res=fact.factorize(x);
+    for(auto [p,exp]:res){
+        // to do
+    }
+
+    // 素数判定
+    if(fact.Prime[x]){} // true -> 素数
+
+    // 最小の素因数
+    int min_factor=fact.spf[x];
+}
+
+#include <bits/stdc++.h>
+using namespace std;
+using ll = long long;
+
+vector<bool> sieve(int x){
+    vector<bool> isPrime(x+1,true);
+    isPrime[0]=false;
+    isPrime[1]=false;
+    for(int i=4;i<=x;i+=2){
+        isPrime[i]=false;
+    }
+    for(int i=3;i*i<=x;i+=2){
+        if(isPrime[i]){
+            int save=i*i;
+            while(save<=x){
+                isPrime[save]=false;
+                save+=i;
+            }
+        }
+    }
+    return isPrime;
+}
+
+int main(){
+    int N;
+    cin>>N;
+    vector<bool> prime=sieve(N);
+}
+
+#include <bits/stdc++.h>
+using namespace std;
+using ll = long long;
+
+struct Sieve{
+    int n;
+    vector<bool> Prime;
+
+    Sieve(int size):n(size),Prime(size+1,true){
+        if(n>=0)Prime[0]=false;
+        if(n>=1)Prime[1]=false;
+
+        // 偶数の処理
+        for(int i=4;i<=n;i+=2)Prime[i]=false;
+
+        // 奇数の処理
+        // nが大きすぎたらここでオーバーフロー(多分無いけど)
+        // i<=n/i で回避できる
+        for(int i=3;i*i<=n;i+=2){
+            if(Prime[i]){
+                // i*2 より i*i の方が速い(らしい)
+                for(int j=i*i;j<=n;j+=i){
+                    Prime[j]=false;
+                }
+            }
+        }
+    }
+};
+
+int main(){
+    int N;
+    cin>>N;
+
+    Sieve sieve(N);
+    if(sieve.Prime[N])cout<<"Prime"<<endl;
+}
+
+
+#include <bits/stdc++.h>
+using namespace std;
+using ll=long long;
+
+const int MIN_INF=-2147483648; //-(2^31-1)
+
+struct SegTree{
+    // ノード番号は1-index、外は0-index
+    // szを決めるとき入力nに対して[0,n)の範囲を確保するから、
+    // インデックスNにアクセスしたいときは(2*N+1)を渡す
+    int sz;
+    vector<int> tree;
+
+    SegTree(int n){
+        sz=1;
+        while(sz<n)sz*=2;
+        tree.resize(2*sz,MIN_INF);
+    }
+
+    void update(int idx,int val){
+        idx+=sz;
+        tree[idx]=val;
+        while(idx>1){
+            idx/=2;
+            tree[idx]=max(tree[idx*2],tree[idx*2+1]);
+        }
+    }
+
+    // a,b: 要求区間 [a,b)
+    // l,r: 現在のノードの担当区間 [l,r)
+    // k: 現在のノード番号
+    int query(int a,int b,int l,int r,int k){
+        if(r<=a||b<=l)return MIN_INF;
+        if(a<=l&&r<=b)return tree[k];
+        int mid=(l+r)/2;
+        int vl=query(a,b,l,mid,2*k);
+        int vr=query(a,b,mid,r,2*k+1);
+        return max(vl,vr);
+    }
+
+    // a,b: 要求区間 [a,b)
+    int query(int a,int b){
+        return query(a,b,0,sz,1);
+    }
+};
+
+int main(){
+    int n,q;
+    cin>>n>>q;
+    SegTree st(n);
+
+    for(int i=0;i<q;i++){
+        int com,x,y;
+        cin>>com>>x>>y;
+        if(com)cout<<st.query(x,y+1)<<endl;
+        else st.update(x,y);
+    }
+}
+
+#include <bits/stdc++.h>
+using namespace std;
+using ll=long long;
+
+const int INF=2147483647; //(2^31-1)
+
+struct SegTree{
+    // ノード番号は1-index、外は0-index
+    // szを決めるとき入力nに対して[0,n)の範囲を確保するから、
+    // インデックスNにアクセスしたいときは(2*N+1)を渡す
+    int sz;
+    vector<int> tree;
+
+    SegTree(int n){
+        sz=1;
+        while(sz<n)sz*=2;
+        tree.resize(2*sz,INF);
+    }
+
+    void update(int idx,int val){
+        idx+=sz;
+        tree[idx]=val;
+        while(idx>1){
+            idx/=2;
+            tree[idx]=min(tree[idx*2],tree[idx*2+1]);
+        }
+    }
+
+    // a,b: 要求区間 [a,b)
+    // l,r: 現在のノードの担当区間 [l,r)
+    // k: 現在のノード番号
+    int query(int a,int b,int l,int r,int k){
+        if(r<=a||b<=l)return INF;
+        if(a<=l&&r<=b)return tree[k];
+        int mid=(l+r)/2;
+        int vl=query(a,b,l,mid,2*k);
+        int vr=query(a,b,mid,r,2*k+1);
+        return min(vl,vr);
+    }
+
+    // a,b: 要求区間 [a,b)
+    int query(int a,int b){
+        return query(a,b,0,sz,1);
+    }
+};
+
+int main(){
+    int n,q;
+    cin>>n>>q;
+    SegTree st(n);
+
+    for(int i=0;i<q;i++){
+        int com,x,y;
+        cin>>com>>x>>y;
+        if(com)cout<<st.query(x,y+1)<<endl;
+        else st.update(x,y);
+    }
+}
+
+#include <bits/stdc++.h>
+using namespace std;
+using ll=long long;
+
+struct SegTree{
+    // ノード番号は1-index、外は0-index
+    // szを決めるとき入力nに対して[0,n)の範囲を確保するから、
+    // インデックスNにアクセスしたいときは(2*N+1)を渡す
+    int sz;
+    vector<ll> tree;
+
+    SegTree(int n){
+        sz=1;
+        while(sz<n)sz*=2;
+        tree.resize(2*sz,0);
+    }
+
+    // 元の値を"変更"するとき
+    void update(int idx,int val){
+        idx+=sz;
+        tree[idx]=val;
+        while(idx>1){
+            idx/=2;
+            tree[idx]=tree[idx*2]+tree[idx*2+1];
+        }
+    }
+
+    // 元の値に"加算"する場合
+    void add(int idx,int val){
+        idx+=sz;
+        tree[idx]+=val;
+        while(idx>1){
+            idx/=2;
+            tree[idx]=tree[idx*2]+tree[idx*2+1];
+        }
+    }
+
+    // a,b: 要求区間 [a,b)
+    // l,r: 現在のノードの担当区間 [l,r)
+    // k: 現在のノード番号
+    ll query(int a,int b,int l,int r,int k){
+        if(r<=a||b<=l)return 0;
+        if(a<=l&&r<=b)return tree[k];
+        int mid=(l+r)/2;
+        ll vl=query(a,b,l,mid,2*k);
+        ll vr=query(a,b,mid,r,2*k+1);
+        return vl+vr;
+    }
+
+    // a,b: 要求区間 [a,b)
+    ll query(int a,int b){
+        return query(a,b,0,sz,1);
+    }
+};
+
+int main(){
+    int n,q;
+    cin>>n>>q;
+    SegTree st(n);
+
+    for(int i=0;i<q;i++){
+        int com,x,y;
+        cin>>com>>x>>y;
+        if(com)cout<<st.query(x,y+1)<<endl;
+        else st.update(x,y);
+    }
+}
+
+#include <bits/stdc++.h>
+using namespace std;
+
+// O(V×E)
+// Vは頂点の数
+// Eは辺の数
+
+// 到達不可能な値にする
+const long long INF=1e18;
+
+// 辺の構造体
+struct Edge{
+    int to;
+    long long cost;
+};
+
+struct bellman_ford_result{
+    bool negative_cycle;
+    vector<long long> dist;
+    vector<int> prev;
+};
+
+bellman_ford_result bellman_ford(vector<vector<Edge>> &G,int start){
+    int V=G.size(); // 頂点数
+    vector<long long> dist(V,INF);
+    vector<int> prev(V,-1);
+
+    dist[start]=0;
+
+    for(int i=0;i<V-1;i++){ // (V-1)回操作する
+        bool update=false;
+        for(int v=0;v<V;v++){
+            if(dist[v]==INF)continue;
+
+            // 到達できる全ての頂点から出てる辺をチェック
+            for(auto &edge:G[v]){
+                if(dist[v]+edge.cost<dist[edge.to]){
+                    dist[edge.to]=dist[v]+edge.cost;
+                    prev[edge.to]=v;
+                    update=true;
+                }
+            }
+        }
+        // 変更が無かったら終了
+        if(!update)break;
+    }
+
+    // 負の閉路の検出
+    bool negative_cycle=false;
+    for(int v=0;v<V;v++){
+        if(dist[v]==INF)continue;
+
+        // 変更があるか確認
+        // 変更がある->負の閉路が存在する((V-1)回の更新で最短経路は必ず確定する)
+        for(auto &edge:G[v]){
+            if(dist[v]+edge.cost<dist[edge.to]){
+                negative_cycle=true;
+            }
+        }
+    }
+
+    return {negative_cycle,dist,prev};
+}
+
+int main(){
+    int V;
+    cin>>V;
+
+    // graphをEdgeを使って宣言
+    vector<vector<Edge>> graph(V);
+
+    int s; // 始点
+    cin>>s;
+    
+    // 返り値の受け取り方
+    // 事前にdist,prevの宣言は不要
+    auto [negative_cycle,dist,prev]=bellman_ford(graph,s);
+
+    int t; // 終点
+    cin>>t;
+
+    // 経路復元
+    vector<int> route;
+    for(int cur=t;cur!=-1;cur=prev[cur]){
+        route.push_back(cur);
+    }
+    reverse(route.begin(),route.end());
+}
+
+#include <bits/stdc++.h>
+using namespace std;
+
+const long long MOD=998244353;
+
+struct COM{
+    vector<long long> fact,ifact;
+
+    long long modpow(long long a,long long n,long long mod){
+        long long res=1;
+        a%=mod;
+        while(n>0){
+            if(n&1)res=res*a%mod;
+            a=a*a%mod;
+            n>>=1;
+        }
+        return res;
+    }
+
+    long long modinv(long long a,long long mod){
+        return modpow(a,mod-2,mod);
+    }
+
+    COM(int n):fact(n+1),ifact(n+1){
+        fact[0]=1;
+        for(int i=1;i<=n;i++)fact[i]=(fact[i-1]*i)%MOD;
+        ifact[n]=modinv(fact[n],MOD);
+        for(int i=n-1;i>=0;i--)ifact[i]=(ifact[i+1]*(i+1))%MOD;
+    }
+
+    long long nCk(int n,int k){
+        if(k<0||n<k)return 0;
+        return fact[n]*ifact[k]%MOD*ifact[n-k]%MOD;
+    }
+    long long nPr(int n,int k){
+        if(k<0||n<k)return 0;
+        return fact[n]*ifact[n-k]%MOD;
+    }
+    long long nHr(int n,int k){
+        if(n==0&&k==0)return 1;
+        return nCk(n+k-1,k);
+    }
+};
+
+
+int main(){
+    COM com(20000); //最大値を決める
+    int n,k;
+    
+    com.nCk(n,k);
+}
+
+#include <bits/stdc++.h>
+using namespace std;
+
+// O((V+E)logV)
+// Vは頂点の数
+// Eは辺の数
+
+// 到達不可能な値にする
+const long long INF=1e18;
+
+// 辺の構造体
+struct Edge{
+    int to;
+    long long cost;
+};
+
+// 戻り値用の構造体
+struct dijkstra_result{
+    vector<long long> dist;
+    vector<int> prev;
+};
+
+dijkstra_result dijkstra(vector<vector<Edge>> &G,int start){
+    int V=G.size(); // 頂点数
+
+    // 記録用配列
+    vector<long long> dist(V,INF);
+    vector<int> prev(V,-1);
+
+    using pli=pair<long long,int>; // { dist, v(頂点) }
+
+    // ""startから"" 一番近い頂点をO(logN)で求められる
+    // その頂点に隣接する頂点は全探索して、最短距離を更新
+    // 全探索してもO(E)にしかならない。(Eは辺の数)
+    priority_queue<pli,vector<pli>,greater<pli>> pq;
+
+    dist[start]=0;
+    pq.push({0,start});
+
+    while(!pq.empty()){
+        auto [cur_dist,v]=pq.top();
+        pq.pop();
+        
+        if(cur_dist>dist[v])continue;
+
+        // vに隣接する頂点edgeについて全探索
+        for(auto &edge:G[v]){
+            if(dist[v]+edge.cost<dist[edge.to]){
+                dist[edge.to]=dist[v]+edge.cost;
+                prev[edge.to]=v;
+                pq.push({dist[edge.to],edge.to});
+            }
+        }
+    }
+
+    return {dist,prev};
+}
+
+int main(){
+    int V;
+    cin>>V;
+
+    // graphをEdgeを使って宣言
+    vector<vector<Edge>> graph(V);
+
+    int s; // 始点
+    cin>>s;
+    
+    // 返り値の受け取り方
+    // 事前にdist,prevの宣言は不要
+    auto [dist,prev]=dijkstra(graph,s);
+
+    int t; // 終点
+    cin>>t;
+
+    // 経路復元
+    vector<int> route;
+    for(int cur=t;cur!=-1;cur=prev[cur]){
+        route.push_back(cur);
+    }
+    reverse(route.begin(),route.end());
+}
+
+#include <bits/stdc++.h>
+using namespace std;
+// 約数の全列挙
+// O(\sqrt(N))
+
+template <integral T> // integralで整数型に限定
+vector<T> get_divisor(T n){
+    vector<T> res;
+    for(T i=1;i<=n/i;i++){
+        if(n%i==0){
+            res.push_back(i);
+            if(i!=n/i)res.push_back(n/i);
+        }
+    }
+    sort(res.begin(),res.end());
+    return res;
+}
+
+int main(){
+    vector<int> divisor=get_divisor(200000000);
+}
+
+#include <bits/stdc++.h>
+using namespace std;
+
+struct UnionFind{
+    // parent[i]>=0 -> 親の頂点番号
+    // parent[i]< 0 -> 根 (絶対値がサイズ)
+    vector<int> parent;
+
+    int group_count; // グループ数
+
+    UnionFind(int n):parent(n,-1),group_count(n){}
+
+    // 頂点xの根を求める + 経路圧縮
+    int root(int x){
+        if(parent[x]<0)return x;
+
+        parent[x]=root(parent[x]);
+        return parent[x];
+    }
+
+    // 頂点 x と y が同じグループに属するか判定
+    bool same(int x,int y){
+        return root(x)==root(y);
+    }
+
+    // 頂点 x と y のグループを併合する
+
+    bool unite(int x,int y){
+        int rx=root(x);
+        int ry=root(y);
+
+        if(rx==ry)return false;
+
+        if(-parent[rx]<-parent[ry])swap(rx,ry);
+
+        parent[rx]+=parent[ry];
+        parent[ry]=rx;
+
+        group_count--;
+
+        return true;
+    }
+
+    // x が属するグループのサイズ
+    int size(int x){
+        return -parent[root(x)];
+    }
+
+    // 現在の総グループ数
+    int count(){
+        return group_count;
+    }
+};
+
+struct Edge{
+    int u,v;
+    long long cost;
+    // 重みが小さい順にソートするための比較演算子
+    bool operator< (const Edge &other) const{
+        return cost<other.cost;
+    }
+};
+
+// 最小全域木のコストの総和を返す
+// グラフが非連結なら -1 を返す
+// O(|E|log|V|)
+
+long long kruskal(int V,vector<Edge> &edge){
+    // コストが小さい順に辺をソート
+    sort(edge.begin(),edge.end());
+
+    UnionFind uf(V); // 閉路判定用
+    long long total_cost=0;
+    int edge_count=0;
+
+    // コストが低い辺から閉路ができないか判定しながら追加
+    for(const auto &e:edge){
+        if(uf.unite(e.u,e.v)){
+            total_cost+=e.cost;
+            edge_count++;
+
+            // 頂点数 V-1 の辺を選んだ時点で終わり
+            if(edge_count==V-1)break;
+        }
+    }
+
+    // グラフが非連結の場合
+    if(V>0 && edge_count < V-1){
+        return -1;
+    }
+
+    return total_cost;
+}
+
+int main(){
+    int V,E;            // 頂点数、辺の数
+    vector<Edge> graph; // グラフ
+
+    for(int i=0;i<E;i++){
+        int u,v;
+        long long cost;
+        cin>>u>>v>>cost;
+        // 0-indexedにするなら、 u--, v--
+        graph.push_back({u,v,cost});
+    }
+
+    long long ans=kruskal(V,graph);
+
+    if(ans==-1)cout<<"graph has no connection"<<endl;
+    else cout<<ans<<endl;
+}
+
+#include <bits/stdc++.h>
+using namespace std;
+
+long long modpow(long long a,long long n,long long mod){
+    long long res=1;
+    a%=mod;
+    while(n>0){
+        if(n&1)res=res*a%mod;
+        a=a*a%mod;
+        n>>=1;
+    }
+    return res;
+}
+
+long long modinv(long long a,long long mod){
+    return modpow(a,mod-2,mod);
+}
+
+int main(){
+    int a,MOD;
+
+    // a の逆元を求める
+    int inv=modinv(a,MOD);
+}
+
+#include <bits/stdc++.h>
+using namespace std;
+
+#include <ext/pb_ds/assoc_container.hpp>
+#include <ext/pb_ds/tree_policy.hpp>
+using namespace __gnu_pbds;
+
+// set(重複なし)
+template<typename T>
+using ordered_set = tree<
+    T, 
+    null_type, 
+    less<T>, 
+    rb_tree_tag, 
+    tree_order_statistics_node_update
+>;
+
+// multiset(重複あり)
+template<typename T>
+using ordered_multiset = tree<
+    pair<T, int>, 
+    null_type, 
+    less<pair<T, int>>, 
+    rb_tree_tag, 
+    tree_order_statistics_node_update
+>;
+
+int main(){
+    ordered_set<int> st; // set
+    ordered_multiset<int> ms; // multiset
+
+    int val,k;
+
+    // 要素の追加 O(logN)
+    st.insert(val);
+
+    int id=0;
+    ms.insert({val,id++});
+
+    // 要素の削除 O(logN)
+    st.erase(val);
+
+    auto it = ms.lower_bound({val, -1});
+    if(it!=ms.end()&&it->first==val)ms.erase(it);
+
+    // k番目の要素のイテレータの取得O(logN)
+    auto it = st.find_by_order(k);
+    // 値の取得は`*`をつける
+    int val = *st.find_by_order(k);
+
+    auto it = ms.find_by_order(k);
+    // 値の取得は`*`をつける
+    int val = it->first;
+    
+}
+
+#include <bits/stdc++.h>
+using namespace std;
+
+// 前方宣言
+long long expression(int &pos,const string &S); // 式
+long long term(int &pos,const string &S);       // 項
+long long factor(int &pos,const string &S);     // 因数
+long long number(int &pos,const string &S);     // 数値
+
+long long number(int &pos,const string &S){
+    long long res=0;
+    while(pos<S.size() && isdigit(S[pos])){
+        res=res*10+(S[pos]-'0');
+        pos++; 
+    }
+    return res;
+}
+
+long long factor(int &pos,const string &S){
+    if(S[pos]=='('){
+        pos++; // '(' を読み飛ばす
+        long long res=expression(pos,S);
+        pos++; // ')' を読み飛ばす
+        return res;
+    }
+    else{
+        return number(pos,S);   
+    }
+}
+
+long long term(int &pos,const string &S){
+    long long res=factor(pos,S); // 左側の値を取得
+    while(pos<S.size() && ( S[pos]=='*' || S[pos]=='/' )){
+        char op=S[pos];
+        pos++;
+
+        long long next_factor=factor(pos,S);
+        if(op=='*')res*=next_factor;
+        if(op=='/')res/=next_factor;
+    }
+    return res;
+}
+
+long long expression(int &pos,const string &S){
+    long long res=term(pos,S);
+    while(pos<S.size() && (S[pos]=='+' || S[pos]=='-')){
+        char op=S[pos];
+        pos++;
+
+        long long next_term=term(pos,S);
+        if(op=='+')res+=next_term;
+        if(op=='-')res-=next_term;
+    }
+    return res;
+}
+
+int main(){
+    string S; // 数値,+,-,*,/ で構成された文字列
+
+    int pos=0;
+    long long ans=expression(pos,S);
+
+    cout<<ans<<endl;
+}
+
+#include <bits/stdc++.h>
+using namespace std;
+
+struct UnionFind{
+    // parent[i]>=0 -> 親の頂点番号
+    // parent[i]< 0 -> 根 (絶対値がサイズ)
+    vector<int> parent;
+
+    int group_count; // グループ数
+
+    UnionFind(int n):parent(n,-1),group_count(n){}
+
+    // 頂点xの根を求める + 経路圧縮
+    int root(int x){
+        if(parent[x]<0)return x;
+
+        parent[x]=root(parent[x]);
+        return parent[x];
+    }
+
+    // 頂点 x と y が同じグループに属するか判定
+    bool same(int x,int y){
+        return root(x)==root(y);
+    }
+
+    // 頂点 x と y のグループを併合する
+
+    bool unite(int x,int y){
+        int rx=root(x);
+        int ry=root(y);
+
+        if(rx==ry)return false;
+
+        if(-parent[rx]<-parent[ry])swap(rx,ry);
+
+        parent[rx]+=parent[ry];
+        parent[ry]=rx;
+
+        group_count--;
+
+        return true;
+    }
+
+    // x が属するグループのサイズ
+    int size(int x){
+        return -parent[root(x)];
+    }
+
+    // 現在の総グループ数
+    int count(){
+        return group_count;
+    }
+};
+
+int main(){
+    int N;   // 頂点数
+    int x,y; // 頂点 
+
+    UnionFind uf(N);
+
+    // x,y を併合
+    uf.unite(x,y);
+
+    // 頂点x の根を求める
+    int root=uf.root(x);
+
+    // 頂点x,y が同じグループに属しているかの判定
+    if(uf.same(x,y)){} // true のとき同じグループに属している
+
+    // xが属するグループのサイズ
+    int size= uf.size(x);
+
+    // 総グループ数
+    // どっちの書き方でも同じ
+    int all_group=uf.count();
+    int all_group=uf.group_count;
+
+    // 閉路検出
+    int cycle=0; // 閉路の数
+    // x,y を繋げると閉路ができるか分かる
+    if(!uf.unite(x,y)){
+        cycle++;
+    }
+}
+
+#include <bits/stdc++.h>
+using namespace std;
+
+// O(|V|^3)ですべての頂点間の最短距離を求める
+// V:頂点数
+
+// 負の辺があってもOK
+// 負の閉路の判定もできる
+
+const long long INF=1e18;
+
+/*
+V×Vの隣接行列のDP配列を用意する。 (0-indexed)
+dp[i][j]= i からj の距離
+ただし、i==jのとき0、辺がないときINF
+返り値:負の閉路が存在するならtrue、そうでなければfalse
+*/
+
+bool warshall_floyd(vector<vector<long long>> &dp){
+    int V=dp.size();
+
+    // 最短距離の計算
+    // 0~kを経由していいときの最短距離を更新していく
+    for(int k=0;k<V;k++){         // 経由する頂点
+        for(int i=0;i<V;i++){     // 始点
+            for(int j=0;j<V;j++){ // 終点
+
+                if(dp[i][k]==INF || dp[k][j]==INF)continue;
+
+                dp[i][j]=min(dp[i][j],dp[i][k]+dp[k][j]);
+            }
+        }
+    }
+
+    // 負の閉路の検出
+    // 頂点iからiの最短距離がマイナスのとき、負の閉路が存在する
+    for(int i=0;i<V;i++){
+        if(dp[i][i]<0)return true;
+    }
+    
+    return false;
+}
+
+int main(){
+    int V,E;
+    // V: 頂点数
+    // E: 辺の数
+
+    // 隣接行列の用意
+    vector<vector<long long>> dp(V, vector<long long>(V,INF));
+
+    for(int i=0;i<V;i++){
+        dp[i][i]=0;
+    }
+
+    for(int i=0;i<E;i++){
+        int u,v;
+        long long cost;
+        cin>>u>>v>>cost;
+
+        // 有向か無向かに注意
+        dp[u][v]=cost;
+    }
+
+    bool negative_cycle = warshall_floyd(dp);
+
+    // 任意の2頂点 x, y の距離
+    int x,y;
+    long long d = dp[x][y];
+}
