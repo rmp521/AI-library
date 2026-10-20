@@ -2665,3 +2665,98 @@ dp用の配列の大きさが不適だった
 `nCr`の計算で$n\leq10^9$でも、計算する二項係数の`r`の総和が小さかったら愚直計算でOK
 
 根付き木を下から見るときは、DFSの帰りがけ順でOK
+
+#include <iostream>
+#include <string>
+
+std::istream& operator>>(std::istream& is, __int128_t& val) {
+    int c;
+    
+    // 1. 空白文字のスキップ
+    while ((c = is.get()) != std::char_traits<char>::eof() && std::isspace(c));
+    
+    if (c == std::char_traits<char>::eof()) {
+        is.setstate(std::ios_base::eofbit | std::ios_base::failbit);
+        return is;
+    }
+    
+    bool negative = false;
+    if (c == '-') {
+        negative = true;
+        c = is.get();
+    } else if (c == '+') {
+        c = is.get();
+    }
+    
+    bool read_digits = false;
+    bool overflow = false;
+    unsigned __int128 uval = 0;
+    
+    // __int128_t の絶対値の最大値 (2^127 - 1)
+    const unsigned __int128 MAX_ABS = ((unsigned __int128)1 << 127) - 1;
+    // 負の場合は絶対値が1つ大きい (2^127) まで許容
+    const unsigned __int128 LIMIT = MAX_ABS + (negative ? 1 : 0);
+    
+    // 2. 数字の読み込み
+    while (c != std::char_traits<char>::eof() && std::isdigit(c)) {
+        read_digits = true;
+        int digit = c - '0';
+        
+        // 3. オーバーフロー検知 (uval * 10 + digit > LIMIT) を安全に計算
+        if (uval > (LIMIT - digit) / 10) {
+            overflow = true;
+        } else {
+            uval = uval * 10 + digit;
+        }
+        
+        c = is.get();
+    }
+    
+    // 読みすぎた文字をストリームに戻す
+    if (c != std::char_traits<char>::eof()) {
+        is.unget();
+    }
+    
+    // 4. エラー判定とストリームの状態更新
+    if (!read_digits || overflow) {
+        // 数字が1つも無かった（"abc" や "-" のみ等）、または桁あふれした場合
+        is.setstate(std::ios_base::failbit);
+        
+        // 標準仕様に倣い、オーバーフロー時は最小値/最大値にクランプする
+        if (overflow) {
+            val = negative ? (-((__int128_t)MAX_ABS) - 1) : MAX_ABS;
+        } else {
+            val = 0;
+        }
+    } else {
+        // 正常終了
+        val = negative ? -(__int128_t)uval : (__int128_t)uval;
+    }
+    
+    return is;
+}
+
+std::ostream& operator<<(std::ostream& os, __int128_t val) {
+    if (val == 0) return os << "0";
+    unsigned __int128 uval = (val < 0) ? (unsigned __int128)(~val) + 1 : val;
+    if (val < 0) os.put('-');
+    char buf[40];
+    int pos = 0;
+    while (uval > 0) { buf[pos++] = '0' + (uval % 10); uval /= 10; }
+    while (pos > 0) os.put(buf[--pos]);
+    return os;
+}
+
+/*
+
+四則演算・剰余: +, -, *, /, %, +=, *= など
+
+比較演算: ==, !=, <, >, <=, >=
+
+ビット演算: &, |, ^, <<, >>, ~
+
+インクリメント・デクリメント: ++, --
+
+が使える
+
+*/
